@@ -4,7 +4,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
+const md5 = require("md5");
 const { request } = require("http");
 
 ///////////////////////////////////////////////////////////////
@@ -23,19 +23,6 @@ const userSchema = new mongoose.Schema({
   email: String,
   password: String,
 });
-
-// Secret Key or Secret string for encrytion connection ... we can put two keys too READ THE DOCUMENTATION of mongoose encrytion pakage
-
-// const secret = "Thisismysecretdonottellanyone"; SHIT IN TO THE .env file
-
-// console.log(process.env.API_KEY);
-
-// Adding mongoose plugin for encrypted connection
-
-userSchema.plugin(encrypt, {
-  secret: process.env.SECRET,
-  encryptedFields: ["password"],
-}); // or excludeFromEncryption: ["password"]
 
 const userModel = new mongoose.model("User", userSchema);
 
@@ -60,7 +47,7 @@ app.listen("8000", () => {
 app.post("/register", (req, res) => {
   const newUser = new userModel({
     email: req.body.username,
-    password: req.body.password,
+    password: md5(req.body.password),
   });
 
   newUser.save((err) => {
@@ -76,7 +63,7 @@ app.post("/register", (req, res) => {
 
 app.post("/login", (req, res) => {
   const userName = req.body.username;
-  const passWord = req.body.password;
+  const passWord = md5(req.body.password);
 
   userModel.findOne({ email: userName }, (err, foundUser) => {
     if (err) {
@@ -84,7 +71,7 @@ app.post("/login", (req, res) => {
     } else {
       if (foundUser) {
         if (foundUser.password === passWord) {
-          //   console.log(foundUser.password); // by this any one can see passwards
+          //   console.log(foundUser.password); // by this any one can see passwards but in encrypted mode
 
           res.render("secrets");
         }
