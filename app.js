@@ -4,7 +4,9 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const md5 = require("md5");
+// const md5 = require("md5");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 const { request } = require("http");
 
 ///////////////////////////////////////////////////////////////
@@ -45,17 +47,20 @@ app.listen("8000", () => {
 //creating a route to catch the user registering data so they can access to secrets file
 
 app.post("/register", (req, res) => {
-  const newUser = new userModel({
-    email: req.body.username,
-    password: md5(req.body.password),
-  });
+  // Store hash in your password DB.
+  bcrypt.hash(req.body.password, saltRounds, function (err, hash) {
+    const newUser = new userModel({
+      email: req.body.username,
+      password: hash,
+    });
 
-  newUser.save((err) => {
-    if (err) {
-      res.send(err);
-    } else {
-      res.render("secrets"); // so secrets file is render only if user register successfully
-    }
+    newUser.save((err) => {
+      if (err) {
+        res.send(err);
+      } else {
+        res.render("secrets"); // so secrets file is render only if user register successfully
+      }
+    });
   });
 });
 
@@ -63,18 +68,25 @@ app.post("/register", (req, res) => {
 
 app.post("/login", (req, res) => {
   const userName = req.body.username;
-  const passWord = md5(req.body.password);
+  const passWord = req.body.password;
 
   userModel.findOne({ email: userName }, (err, foundUser) => {
     if (err) {
       console.log(err);
     } else {
       if (foundUser) {
-        if (foundUser.password === passWord) {
-          //   console.log(foundUser.password); // by this any one can see passwards but in encrypted mode
+        // if (foundUser.password === passWord) {  // passWord is veriable and pasword is database keyword
 
-          res.render("secrets");
-        }
+        // Load hash from your password DB. login
+        bcrypt.compare(passWord, foundUser.password, function (err, result) {
+          if (result === true) {
+            res.render("secrets");
+          }
+          // result == true
+        });
+        //   console.log(foundUser.password); // by this any one can not see passwards in encrypted mode
+
+        // }
       }
     }
   });
