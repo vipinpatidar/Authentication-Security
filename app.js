@@ -5,8 +5,12 @@ const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
 // const md5 = require("md5");
-const bcrypt = require("bcrypt");
-const saltRounds = 10;
+// const bcrypt = require("bcrypt");
+// const saltRounds = 10;
+const session = require("express-session");
+const passport = require("passport");
+const passportLocalMongoose = require("passport-local-mongoose");
+// don't need to require the passport-local
 const { request } = require("http");
 
 ///////////////////////////////////////////////////////////////
@@ -16,6 +20,21 @@ const app = express();
 app.use(express.static("public"));
 app.set("view engine", "ejs");
 app.use(bodyParser.urlencoded({ extended: true }));
+
+//setUp session
+app.use(
+  session({
+    secret: "our little secret.",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+
+//  passport initialization
+app.use(passport.initialize());
+
+// setup passport to manage our session
+app.use(passport.session());
 //////////////////////////////////////////////////////////////////////////////////
 
 mongoose.connect("mongodb://localhost:27017/userDB");
@@ -26,7 +45,17 @@ const userSchema = new mongoose.Schema({
   password: String,
 });
 
+// set up passport-local-mongoose
+userSchema.plugin(passportLocalMongoose);
+
 const userModel = new mongoose.model("User", userSchema);
+
+// passport-local configuration
+
+passport.use(userModel.createStrategy());
+
+passport.serializeUser(userModel.serializeUser());
+passport.deserializeUser(userModel.deserializeUser());
 
 app.get("/", (req, res) => {
   res.render("home");
@@ -40,54 +69,66 @@ app.get("/register", (req, res) => {
   res.render("register");
 });
 
-app.listen("8000", () => {
-  console.log("listening on port 8000");
+// creating secrets.ejs route for authenticate user
+app.get("/secrets", (req, res) => {
+  if (req.isAuthenticated()) {
+    res.render("secrets");
+  } else {
+    res.redirect("/login");
+  }
 });
-
+//  setting up logout route for logout users
+app.get("/logout", (req, res) => {
+  req.logout(function (err) {
+    if (err) {
+      return next(err);
+    }
+    res.redirect("/");
+  });
+});
 //creating a route to catch the user registering data so they can access to secrets file
 
 app.post("/register", (req, res) => {
-  // Store hash in your password DB.
-  bcrypt.hash(req.body.password, saltRounds, function (err, hash) {
-    const newUser = new userModel({
-      email: req.body.username,
-      password: hash,
-    });
+  // registertion and use in passport to authenticate and save data and passward by hashing and salting
 
-    newUser.save((err) => {
+  userModel.register(
+    { username: req.body.username },
+    req.body.password,
+    (err, user) => {
       if (err) {
-        res.send(err);
+        console.log(err);
+        res.redirect("/register");
       } else {
-        res.render("secrets"); // so secrets file is render only if user register successfully
+        // authenticate start from here
+        passport.authenticate("local")(req, res, () => {
+          res.redirect("/secrets");
+        });
       }
-    });
-  });
+    }
+  );
 });
 
 //creating a route to catch the user login data so the can access to secrets file
 
 app.post("/login", (req, res) => {
-  const userName = req.body.username;
-  const passWord = req.body.password;
-
-  userModel.findOne({ email: userName }, (err, foundUser) => {
+  const user = new userModel({
+    username: req.body.username,
+    password: req.body.password,
+  });
+  //  login methos for chaking login details with database connection
+  req.login(user, (err) => {
     if (err) {
       console.log(err);
+      res.redirect("/login");
     } else {
-      if (foundUser) {
-        // if (foundUser.password === passWord) {  // passWord is veriable and pasword is database keyword
-
-        // Load hash from your password DB. login
-        bcrypt.compare(passWord, foundUser.password, function (err, result) {
-          if (result === true) {
-            res.render("secrets");
-          }
-          // result == true
-        });
-        //   console.log(foundUser.password); // by this any one can not see passwards in encrypted mode
-
-        // }
-      }
+      //  puting authenticate
+      passport.authenticate("local")(req, res, () => {
+        res.redirect("/secrets");
+      });
     }
   });
+});
+
+app.listen("8000", () => {
+  console.log("listening on port 8000");
 });
