@@ -45,6 +45,7 @@ const userSchema = new mongoose.Schema({
   email: String,
   password: String,
   googleId: String,
+  secret: String,
 });
 
 // set up passport-local-mongoose
@@ -87,7 +88,7 @@ passport.use(
       userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
     function (accessToken, refreshToken, profile, cb) {
-      console.log(profile);
+      // console.log(profile);
       userModel.findOrCreate({ googleId: profile.id }, function (err, user) {
         return cb(err, user);
       });
@@ -124,12 +125,33 @@ app.get("/register", (req, res) => {
 
 // creating secrets.ejs route for authenticate user
 app.get("/secrets", (req, res) => {
+  // if (req.isAuthenticated()) {
+  //   res.render("secrets");
+  // } else {
+  //   res.redirect("/login");
+  // }
+
+  //allwing all to she secrets (but submit only for login user ) and find all secrets on database and put on page
+  userModel.find({ secret: { $ne: null } }, (err, usersWithSecret) => {
+    if (err) {
+      console.log(err);
+    } else {
+      if (usersWithSecret) {
+        res.render("secrets", { usersWhoHasSecret: usersWithSecret });
+      }
+    }
+  });
+});
+
+// setting a route for submit page and chaking user authentication
+app.get("/submit", function (req, res) {
   if (req.isAuthenticated()) {
-    res.render("secrets");
+    res.render("submit");
   } else {
     res.redirect("/login");
   }
 });
+
 //  setting up logout route for logout users
 app.get("/logout", (req, res) => {
   req.logout(function (err) {
@@ -178,6 +200,25 @@ app.post("/login", (req, res) => {
       passport.authenticate("local")(req, res, () => {
         res.redirect("/secrets");
       });
+    }
+  });
+});
+
+// submit page post request when A user submit his secrets this should show on secrets page
+app.post("/submit", (req, res) => {
+  const submittedSecret = req.body.secret;
+  console.log(req.user.id);
+  // finding user who submit on submit page  and  put his secret into his database
+  userModel.findById(req.user.id, (err, foundUser) => {
+    if (err) {
+      console.log(err);
+    } else {
+      if (foundUser) {
+        foundUser.secret = submittedSecret;
+        foundUser.save(() => {
+          res.redirect("/secrets");
+        });
+      }
     }
   });
 });
